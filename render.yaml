@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: trustvault
+    runtime: docker
+    plan: free
+    envVars:
+      - key: TV_AUDIT_KEY          # HMAC key for the audit chain. Generated once, kept out of the repo.
+        generateValue: true
+      - key: TV_SECURE_COOKIES
+        value: "1"
+      - key: TV_TRUST_PROXY
+        value: "1"
+      # Free plans have an EPHEMERAL disk: data (and the audit log) reset on each deploy/restart.
+      # For real use attach a persistent disk mounted at /data (paid plan) - see README.
