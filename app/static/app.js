@@ -33,22 +33,31 @@ function render() {
   if (me) ({ docs: docsView, trash: docsView, users: usersView, adocs: adminDocsView, audit: auditView, alerts: alertsView }[view] || docsView)();
 }
 function loginView() {
-  const u = el('input', { placeholder: 'username', autocomplete: 'username' });
-  const p = el('input', { type: 'password', placeholder: 'password', autocomplete: 'current-password' });
+  const u = el('input', { placeholder: 'Username', autocomplete: 'username', 'aria-label': 'Username' });
+  const p = el('input', { type: 'password', placeholder: 'Password', autocomplete: 'current-password', 'aria-label': 'Password' });
   const msg = el('div', { class: 'err', id: 'toast' });
   const go = guard(async () => { const j = await api('POST', '/login', { username: u.value, password: p.value }); me = j.user; csrf = j.csrf; view = me.role === 'admin' ? 'users' : 'docs'; render(); });
   p.addEventListener('keydown', e => e.key === 'Enter' && go().catch(() => {}));
-  return el('main', {}, el('div', { class: 'card' }, el('h1', {}, 'TrustVault'), el('p', { class: 'mut' }, 'Secure document sharing with a verifiable audit trail.'),
-    el('div', { class: 'row' }, u, p, el('button', { class: 'p', onclick: go }, 'Sign in')), msg));
+  return el('main', { class: 'login-page' },
+    el('section', { class: 'login-brand' },
+      el('div', { class: 'login-brand-top' }, el('span', { class: 'brand-mark', 'aria-hidden': 'true' }, 'T'), 'TrustVault'),
+      el('div', { class: 'login-copy' }, el('p', { class: 'eyebrow' }, 'Private by design'), el('h1', {}, 'TrustVault'),
+        el('p', {}, 'Secure document sharing with a verifiable audit trail.')),
+      el('div', { class: 'login-footnote' }, 'Secure workspace')),
+    el('section', { class: 'login-panel' }, el('div', { class: 'login-form' },
+      el('p', { class: 'eyebrow' }, 'Welcome back'), el('h2', {}, 'Sign in'),
+      el('p', {}, 'Use your account to continue.'), u, p,
+      el('button', { class: 'p', onclick: go }, 'Sign in'), msg)));
 }
 function shell() {
   const tabs = me.role === 'admin' ? [['users', 'Users'], ['adocs', 'Documents (metadata)'], ['audit', 'Audit'], ['alerts', 'Alerts']]
     : [['docs', 'Documents'], ['trash', 'Trash']];
-  return el('div', {}, el('header', {}, el('h1', {}, 'TrustVault'),
-    el('nav', {}, tabs.map(([k, l]) => el('button', { class: view === k ? 'on' : '', onclick: () => { view = k; render(); } }, l))),
-    el('span', { class: 'mut' }, `${me.display_name} (${me.role})`),
-    el('button', { onclick: guard(async () => { await api('POST', '/logout'); me = csrf = null; render(); }) }, 'Sign out')),
-    el('main', {}, el('div', { id: 'toast' }), el('div', { id: 'view' })));
+  return el('div', { class: 'app-shell' }, el('header', { class: 'topbar' },
+    el('h1', { class: 'brand' }, el('span', { class: 'brand-mark', 'aria-hidden': 'true' }, 'T'), 'TrustVault'),
+    el('nav', { class: 'top-nav', 'aria-label': 'Main navigation' }, tabs.map(([k, l]) => el('button', { class: `nav-button ${view === k ? 'on' : ''}`, 'aria-current': view === k ? 'page' : false, onclick: () => { view = k; render(); } }, l))),
+    el('span', { class: 'identity' }, `${me.display_name} · ${me.role}`),
+    el('button', { class: 'signout', onclick: guard(async () => { await api('POST', '/logout'); me = csrf = null; render(); }) }, 'Sign out')),
+    el('main', { class: 'workspace' }, el('div', { id: 'toast' }), el('div', { id: 'view' })));
 }
 const V = () => document.getElementById('view');
 
@@ -69,15 +78,16 @@ function docsView() {
       : el('p', { class: 'mut' }, 'No documents.'));
   });
   V().replaceChildren(
-    el('div', { class: 'card' }, el('div', { class: 'row' }, mk('q', 'name'), mk('owner', 'owner'), mk('category', 'category'),
+    el('div', { class: 'page-heading' }, el('div', {}, el('p', { class: 'eyebrow' }, 'Secure workspace'), el('h2', {}, view === 'trash' ? 'Trash' : 'Documents'))),
+    el('div', { class: 'card filter-bar' }, el('div', { class: 'row' }, mk('q', 'Search by name'), mk('owner', 'Owner'), mk('category', 'Category'),
       el('label', { class: 'mut' }, 'from ', mk('from', '', 'date')), el('label', { class: 'mut' }, 'to ', mk('to', '', 'date')),
       el('button', { class: 'p', onclick: search }, 'Search'))),
-    me.role === 'owner' && view === 'docs' ? uploadCard(search) : null, list, el('div', { id: 'detail' }));
+    ...(me.role === 'owner' && view === 'docs' ? [uploadCard(search)] : []), list, el('div', { id: 'detail' }));
   search();
 }
 function uploadCard(after) {
   const file = el('input', { type: 'file' }), name = el('input', { placeholder: 'title (optional)' }), cat = el('input', { placeholder: 'category' }), desc = el('input', { placeholder: 'description' });
-  return el('div', { class: 'card' }, el('b', {}, 'Upload a document'), el('div', { class: 'row' }, file, name, cat, desc,
+  return el('div', { class: 'card upload-card' }, el('b', {}, 'Upload a document'), el('div', { class: 'row' }, file, name, cat, desc,
     el('button', { class: 'p', onclick: guard(async () => {
       const fd = new FormData(); if (!file.files[0]) throw new Error('choose a file');
       fd.append('file', file.files[0]); fd.append('name', name.value); fd.append('category', cat.value); fd.append('description', desc.value);
@@ -132,7 +142,8 @@ async function usersView() {
   const j = await api('GET', '/admin/users');
   const f = { username: el('input', { placeholder: 'username' }), display_name: el('input', { placeholder: 'full name' }), password: el('input', { type: 'password', placeholder: 'password (10+)' }),
     role: el('select', {}, ['viewer', 'owner', 'admin'].map(r => el('option', { value: r }, r))) };
-  V().replaceChildren(el('div', { class: 'card' }, el('b', {}, 'Create user'), el('div', { class: 'row' }, Object.values(f),
+  V().replaceChildren(el('div', { class: 'page-heading' }, el('div', {}, el('p', { class: 'eyebrow' }, 'Administration'), el('h2', {}, 'Users'))),
+    el('div', { class: 'card' }, el('b', {}, 'Create user'), el('div', { class: 'row' }, Object.values(f),
     el('button', { class: 'p', onclick: guard(async () => { await api('POST', '/admin/users', Object.fromEntries(Object.entries(f).map(([k, i]) => [k, i.value]))); say('User created'); usersView(); }) }, 'Create'))),
     el('div', { class: 'card' }, el('table', {}, el('thead', {}, el('tr', {}, ['User', 'Role', 'Status', ''].map(h => el('th', {}, h)))),
       el('tbody', {}, j.users.map(u => el('tr', {}, el('td', {}, `${u.display_name} (${u.username})`), el('td', {}, u.role), el('td', {}, u.active ? 'active' : 'disabled'),
@@ -140,7 +151,8 @@ async function usersView() {
 }
 async function adminDocsView() {
   const j = await api('GET', '/admin/documents');
-  V().replaceChildren(el('div', { class: 'card' }, el('p', { class: 'mut' }, 'Metadata only. Administrators cannot open document contents.'),
+  V().replaceChildren(el('div', { class: 'page-heading' }, el('div', {}, el('p', { class: 'eyebrow' }, 'Administration'), el('h2', {}, 'Document metadata'))),
+    el('div', { class: 'card' }, el('p', { class: 'mut' }, 'Metadata only. Administrators cannot open document contents.'),
     el('table', {}, el('thead', {}, el('tr', {}, ['ID', 'Name', 'Owner', 'Category', 'Grants', 'Last activity', ''].map(h => el('th', {}, h)))),
       el('tbody', {}, j.documents.map(d => el('tr', {}, el('td', {}, d.id), el('td', {}, d.name), el('td', {}, d.owner), el('td', {}, d.category), el('td', {}, d.grant_count), el('td', {}, fmt(d.last_activity)), el('td', {}, d.deleted_at ? 'deleted' : '')))))));
 }
@@ -149,12 +161,14 @@ async function auditView() {
   const out = el('div'), ver = el('div');
   const load = guard(async () => { const j = await api('GET', '/admin/audit?limit=200' + (sel.value ? '&prefix=' + encodeURIComponent(sel.value) : '')); out.replaceChildren(evTable(j.events)); });
   sel.addEventListener('change', load);
-  V().replaceChildren(el('div', { class: 'card' }, el('div', { class: 'row' }, sel,
+  V().replaceChildren(el('div', { class: 'page-heading' }, el('div', {}, el('p', { class: 'eyebrow' }, 'Administration'), el('h2', {}, 'Audit trail'))),
+    el('div', { class: 'card' }, el('div', { class: 'row' }, sel,
     el('button', { onclick: guard(async () => { const v = await api('GET', '/admin/audit/verify'); ver.replaceChildren(el('b', { class: v.ok ? 'ok' : 'err' }, v.ok ? `Chain intact: ${v.checked} records verified. Head #${v.head && v.head.seq} ${v.head ? v.head.hash.slice(0, 16) : ''}...` : `TAMPERING DETECTED at record #${v.first_bad_seq}`)); }) }, 'Verify integrity')), ver, out));
   load();
 }
 async function alertsView() {
   const j = await api('GET', '/admin/alerts');
-  V().replaceChildren(el('div', { class: 'card' }, j.alerts.length ? el('table', {}, el('tbody', {}, j.alerts.map(a => el('tr', {}, el('td', { class: a.severity === 'high' ? 'err' : '' }, a.severity), el('td', {}, a.message))))) : el('p', { class: 'ok' }, 'Nothing needs attention.')));
+  V().replaceChildren(el('div', { class: 'page-heading' }, el('div', {}, el('p', { class: 'eyebrow' }, 'Administration'), el('h2', {}, 'Alerts'))),
+    el('div', { class: 'card' }, j.alerts.length ? el('table', {}, el('tbody', {}, j.alerts.map(a => el('tr', {}, el('td', { class: a.severity === 'high' ? 'err' : '' }, a.severity), el('td', {}, a.message))))) : el('p', { class: 'ok' }, 'Nothing needs attention.')));
 }
 boot().catch(e => { $app.textContent = 'Failed to load: ' + e.message; });
